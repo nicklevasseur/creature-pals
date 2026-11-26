@@ -71,7 +71,7 @@ FRIEND_FNS[who]();
 const titleScreen = document.getElementById("splash");
 document.getElementById("play").onclick = () => {{ audio(); titleScreen.hidden = true; startAmbience(AMBIENCE[who]); }};''' + C[b:]
 
-rep('<canvas id="stage"', '''<div id="splash"><div class="splash-card"><h2>Creature Pals</h2><p>Thirteen friends to play with</p><button id="play">Tap to play</button></div></div>
+rep('<canvas id="stage"', '''<div id="splash"><div class="splash-card"><h2>Creature Pals</h2><p id="count">Lots of friends to play with</p><button id="play">Tap to play</button></div></div>
 <canvas id="stage"''')
 rep("[hidden] { display: none !important; }", """[hidden] { display: none !important; }
 #splash { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(20, 18, 40, .35);

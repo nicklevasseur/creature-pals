@@ -97,7 +97,7 @@ button:active { transform: scale(.96); }
 @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
 </style>
 
-<div id="splash"><div class="splash-card"><h2>Creature Pals</h2><p>Thirteen friends to play with</p><button id="play">Tap to play</button></div></div>
+<div id="splash"><div class="splash-card"><h2>Creature Pals</h2><p id="count">Lots of friends to play with</p><button id="play">Tap to play</button></div></div>
 <canvas id="stage" aria-label="A friendly 3D creature. Drag to spin it around, tap it to say hi."></canvas>
 <header>
   <div id="switch"><select id="pick" aria-label="Choose a friend"></select></div>
@@ -290,6 +290,8 @@ function showPanel() {
   pick.value = who;
 }
 showPanel();
+{ const words = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty"];
+  document.getElementById("count").textContent = (words[FRIENDS.length] || FRIENDS.length) + " friends to play with"; }
 
 // ---- sounds: made live with Web Audio (no files). Starts on the first tap, as browsers require.
 let AC = null, soundOn = true;
