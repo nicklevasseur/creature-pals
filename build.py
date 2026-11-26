@@ -62,9 +62,13 @@ MANIFEST = """{
 """
 SW = """// Keeps every file of the app on the device, so it runs with no internet. A new build changes VERSION.
 const VERSION = "%s", FILES = %s;
-self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES))); });
+self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES.map(f => new Request(f, { cache: "reload" }))))); });   // fresh copies, never the browser's short-term cache
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim())));
-self.addEventListener("fetch", e => e.respondWith(caches.match(e.request, { ignoreSearch: true }).then(r => r || fetch(e.request))));
+// the page itself: fresh when online (so updates show at once), the saved copy when offline; everything else from the saved copy
+self.addEventListener("fetch", e => {
+  if (e.request.mode === "navigate") e.respondWith(fetch(e.request, { cache: "no-store" }).then(r => { const c = r.clone(); caches.open(VERSION).then(k => k.put("index.html", c)); return r; }).catch(() => caches.match("index.html")));
+  else e.respondWith(caches.match(e.request, { ignoreSearch: true }).then(r => r || fetch(e.request)));
+});
 """
 
 def build():
