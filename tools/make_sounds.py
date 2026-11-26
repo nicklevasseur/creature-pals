@@ -61,6 +61,19 @@ effect("chicks", "chicks.ogg", 2.0, 3.0, level=-20)
 effect("coo", "dove-cooing.ogg", 0.0, 4.0)
 effect("pigeon-flap", "pigeon-flight.ogg")
 effect("pebbles", "pebble-beach.ogg", 5.0, 3.0, level=-20)
+# the whale and the cow (2026-11-26); long whale recordings use their loudest stretch, where the whale is calling
+def loudest(src, dur):
+    import numpy as np
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(SRC / src), "-ac", "1", "-ar", "8000", "-f", "s16le", "-"], capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, dtype=np.int16).astype(float); w = int(dur * 8000)
+    e = np.convolve(x * x, np.ones(w), "valid")[::400]
+    return round(float(np.argmax(e)) * 400 / 8000, 2)
+effect("whale-song", "humpback-song.mp3", loudest("humpback-song.mp3", 6.0), 6.0, level=-18)
+effect("whale-call", "humpback-moo.mp3", loudest("humpback-moo.mp3", 3.0), 3.0, level=-18)
+effect("big-splash", "big-splash.ogg")
+effect("moo", "cow-moo3.ogg")
+effect("moo2", "cow-moo5.ogg")
+effect("cowbell", "cow-and-bell.mp3")
 total = sum(p.stat().st_size for p in OUT.glob("*.mp3"))
 for p in sorted(OUT.glob("*.mp3")): print(f"{p.name:22} {p.stat().st_size // 1024:4} KB")
 print(f"total {total // 1024} KB")

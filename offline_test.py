@@ -14,7 +14,7 @@ with sync_playwright() as pw:
     pg.wait_for_timeout(1500); pg.reload(); pg.wait_for_timeout(1000)
     print("service worker in control:", pg.evaluate("!!navigator.serviceWorker.controller"))
     srv.shutdown(); ctx.set_offline(True)
-    for w in ["possum", "giraffe", "gorilla", "otter", "sloth", "monkey", "chicken", "pigeon", "tarantula", "octopus", "crab", "lobster", "manta"]:
+    for w in ["possum", "giraffe", "gorilla", "otter", "sloth", "monkey", "chicken", "pigeon", "tarantula", "octopus", "crab", "lobster", "manta", "whale", "cow"]:
         pg.goto(url + "#" + w); pg.reload(); pg.wait_for_timeout(900)
         ok = pg.evaluate("document.fonts.check('700 20px Fredoka') && typeof THREE !== 'undefined'")
         print(f"offline {w:8} -> {pg.locator('#name').text_content():14} three.js+font loaded: {ok}")

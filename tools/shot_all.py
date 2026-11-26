@@ -9,7 +9,7 @@ with sync_playwright() as pw:
     b = pw.chromium.launch(args=["--use-gl=swiftshader", "--enable-unsafe-swiftshader"]); pg = b.new_page(viewport={"width": 700, "height": 620})
     errs = []; pg.on("pageerror", lambda e: errs.append(str(e)))
     for w in W:
-        pg.goto(f + "#" + w); pg.reload(); pg.add_style_tag(content=".panel { display: none !important; } #switch { display: none !important; }"); pg.wait_for_timeout(3500)
+        pg.goto(f + "#" + w); pg.reload(); pg.add_style_tag(content=".panel, #switch, #splash { display: none !important; }"); pg.wait_for_timeout(3500)
         pg.screenshot(path=f"shot-{w}.png")
         print(w, "errors so far:", len(errs))
     b.close()

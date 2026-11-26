@@ -12,7 +12,7 @@ with sync_playwright() as pw:
     print("title screen showing:", pg.locator("#splash").is_visible())
     pg.click("#play"); pg.wait_for_timeout(1500)
     print("after tap: audio", pg.evaluate("AC && AC.state"), "| loop playing:", pg.evaluate("!!ambience"))
-    for w in ["chicken", "crab", "tarantula", "giraffe", "possum", "otter"]:
+    for w in ["whale", "cow", "chicken", "crab", "tarantula", "giraffe", "possum", "otter"]:
         pg.select_option("#pick", w); pg.wait_for_timeout(1800)
         st = pg.evaluate("[who, document.getElementById('name').textContent, !!ambience, AMBIENCE[who], document.querySelectorAll('#panel-' + who + ' .swatch').length, location.hash]")
         print(f"switched to {w:9} -> {st}")

@@ -5,7 +5,7 @@ from playwright.sync_api import sync_playwright
 H = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(Path(__file__).resolve().parent.parent / "app")); H.log_message = lambda *a: None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H); threading.Thread(target=srv.serve_forever, daemon=True).start()
 url = f"http://127.0.0.1:{srv.server_port}/index.html"
-TRICK = {"crab": "Sidestep", "tarantula": "Burrow", "chicken": "Lay an egg", "pigeon": "Fly", "possum": "Wave", "giraffe": "Snack", "gorilla": "Chest pound", "otter": "Swim", "sloth": "Climb", "monkey": "Ooh ooh ah ah",
+TRICK = {"whale": "Sing", "cow": "Moo", "crab": "Sidestep", "tarantula": "Burrow", "chicken": "Lay an egg", "pigeon": "Fly", "possum": "Wave", "giraffe": "Snack", "gorilla": "Chest pound", "otter": "Swim", "sloth": "Climb", "monkey": "Ooh ooh ah ah",
          "octopus": "Swim", "lobster": "Tail flip", "manta": "Swoop"}
 with sync_playwright() as pw:
     b = pw.chromium.launch(args=["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--autoplay-policy=no-user-gesture-required"])
