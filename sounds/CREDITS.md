@@ -23,3 +23,20 @@ Each licence was read on the source page. The files here were trimmed, looped an
 | swirl.mp3 | Swirl in the water | https://bigsoundbank.com/UPLOAD/ogg/0192.ogg | Joseph SARDIN (BigSoundBank) | CC0 |
 
 BigSoundBank's licence: https://bigsoundbank.com/licence.html
+
+## Added 2026-11-26 for the crab, tarantula, chicken and pigeon
+
+| File | Made from | Source | Author | Licence |
+|---|---|---|---|---|
+| amb-farm.mp3 | Henhouse | https://bigsoundbank.com/henhouse-s0282.html | Denis Chardonnet (BigSoundBank) | CC0 |
+| amb-park.mp3 | Urban undergrowth | https://bigsoundbank.com/urban-undergrowth-s0755.html | Joseph SARDIN (BigSoundBank) | CC0 |
+| amb-desert.mp3 | Sun and heat 1 | https://bigsoundbank.com/sun-and-heat-1-s1779.html | Joseph SARDIN (BigSoundBank) | CC0 |
+| rooster.mp3 | Song of a Rooster | https://bigsoundbank.com/song-of-rooster-s0283.html | Denis Chardonnet (BigSoundBank) | CC0 |
+| cluck.mp3 | Annoyed Hen | https://bigsoundbank.com/annoyed-hen-s0453.html | Joseph SARDIN (BigSoundBank) | CC0 |
+| egg-cackle.mp3 | Hen announcing she's lain an egg | https://commons.wikimedia.org/wiki/File:Hen_announcing_shes_lain_an_egg.ogg | alys (PDSounds) | Public domain |
+| chicks.mp3 | Chick 1 (Stuffings) | https://bigsoundbank.com/chick-1-stuffings-s0430.html | Joseph SARDIN (BigSoundBank) | CC0 |
+| coo.mp3 | Dove cooing | https://commons.wikimedia.org/wiki/File:Dove_cooing.ogg | mary905 (PDSounds) | Public domain |
+| pigeon-flap.mp3 | Flight of a pigeon | https://bigsoundbank.com/flight-of-a-pigeon-s0840.html | Joseph SARDIN (BigSoundBank) | CC0 |
+| pebbles.mp3 | On a pebble beach | https://commons.wikimedia.org/wiki/File:On_a_pebble_beach.ogg | earthcalling (PDSounds) | Public domain |
+
+The tarantula's trick sounds reuse rustle.mp3 and leaves.mp3 (above); tarantulas make no sounds of their own.
