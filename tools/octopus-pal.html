@@ -1,0 +1,286 @@
+<title>Octopus Pal</title>
+<canvas id="stage"></canvas>
+<div id="panel">
+  <div class="row">
+    <button id="b-wave">Wave hello</button>
+    <button id="b-ink">Squirt ink</button>
+    <button id="b-rainbow">Change colors</button>
+    <button id="b-jet">Swim</button>
+    <button id="b-name">Name me</button>
+  </div>
+  <div class="row" id="colors" aria-label="Octopus color"></div>
+  <div id="hint">Drag to spin me around. Tap me to say hi.</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const ease = { out: t => 1 - Math.pow(1 - t, 3), inOut: t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2 };
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp(t, 0, 1), lerp = (a, b, t) => a + (b - a) * t;
+
+const canvas = document.getElementById("stage");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+camera.position.set(2.5, 3.2, 6);
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.target.set(0, 0.9, 0); controls.enableDamping = true; controls.enablePan = false;
+controls.minDistance = 3.5; controls.maxDistance = 14; controls.maxPolarAngle = Math.PI * 0.48;
+controls.autoRotate = !calm; controls.autoRotateSpeed = 0.5;
+controls.addEventListener("start", () => controls.autoRotate = false);
+
+scene.add(new THREE.HemisphereLight(0xc8f4ff, 0x1d4e6b, 0.8));
+const sunLight = new THREE.DirectionalLight(0xeafcff, 0.75);
+sunLight.position.set(3, 9, 4); sunLight.castShadow = true; sunLight.shadow.mapSize.set(1024, 1024);
+Object.assign(sunLight.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4 });
+scene.add(sunLight);
+
+const ball = new THREE.SphereGeometry(1, 32, 24);
+function part(geo, mat, parent, x, y, z, sx = 1, sy = 1, sz = 1) {
+  const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = true; parent.add(m); return m;
+}
+
+// the sea floor: sand, rocks, seaweed, coral, a starfish, sunbeams from the surface
+const sand = new THREE.Mesh(new THREE.CircleGeometry(7, 48), new THREE.MeshStandardMaterial({ color: 0xd2b77c, roughness: 1 }));
+sand.rotation.x = -Math.PI / 2; sand.receiveShadow = true; scene.add(sand);
+const stoneMat = new THREE.MeshStandardMaterial({ color: 0x7d8a92, roughness: 0.9 });
+for (const [x, z, s] of [[-2.8, -1.2, 0.5], [3.0, 0.4, 0.4], [1.9, -2.6, 0.55]]) {
+  const r = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), stoneMat); r.position.set(x, 0.1, z); r.castShadow = true; scene.add(r);
+}
+const weedMat = new THREE.MeshStandardMaterial({ color: 0x3f9e5a, roughness: 0.8 });
+const weeds = [];
+for (const [x, z, h] of [[-2.2, -1.9, 7], [-2.6, -0.4, 5], [2.4, -1.6, 8], [2.8, -0.6, 5], [-1.2, -2.6, 6], [0.9, -2.8, 7]]) {
+  let parent = new THREE.Group(); parent.position.set(x, 0, z); scene.add(parent); const segs = [];
+  for (let i = 0; i < h; i++) {
+    const g = new THREE.Group(); g.position.y = i ? 0.28 : 0; parent.add(g);
+    part(new THREE.CylinderGeometry(0.04, 0.055, 0.3, 6), weedMat, g, 0, 0.15, 0);
+    part(ball, weedMat, g, (i % 2 ? 1 : -1) * 0.08, 0.15, 0, 0.09, 0.03, 0.04);
+    segs.push(g); parent = g;
+  }
+  weeds.push({ segs, ph: x * 1.7 + z });
+}
+for (const [x, z, c] of [[-1.7, -1.4, 0xff7f6e], [1.6, -1.9, 0xc77dff], [-3.0, 0.9, 0xffb347]]) {
+  const coralMat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 }), g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
+  part(new THREE.CylinderGeometry(0.06, 0.09, 0.5, 8), coralMat, g, 0, 0.25, 0);
+  for (const [rz, ry] of [[0.6, 0], [-0.7, 0.5], [0.3, 2.2], [-0.4, 3.6]]) {
+    const b = new THREE.Group(); b.position.y = 0.4; b.rotation.set(0, ry, rz); g.add(b);
+    part(new THREE.CylinderGeometry(0.04, 0.05, 0.4, 8), coralMat, b, 0, 0.2, 0); part(ball, coralMat, b, 0, 0.42, 0, 0.06, 0.06, 0.06);
+  }
+}
+const starShape = new THREE.Shape();
+for (let i = 0; i < 10; i++) { const r = i % 2 ? 0.08 : 0.2, a = i / 10 * Math.PI * 2; i ? starShape.lineTo(Math.sin(a) * r, Math.cos(a) * r) : starShape.moveTo(Math.sin(a) * r, Math.cos(a) * r); }
+const star = new THREE.Mesh(new THREE.ExtrudeGeometry(starShape, { depth: 0.04, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 }), new THREE.MeshStandardMaterial({ color: 0xff8a3d, roughness: 0.7 }));
+star.rotation.x = -Math.PI / 2; star.position.set(1.4, 0.03, 1.3); star.castShadow = true; scene.add(star);
+const beams = [];
+for (const [x, z, r] of [[-1.5, -1.5, 0.25], [0.6, -2.2, -0.15], [2.0, -0.8, 0.2]]) {
+  const b = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 7), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
+  b.position.set(x, 3.2, z); b.rotation.z = r; scene.add(b); beams.push(b);
+}
+// a little yellow fish that swims laps around the reef
+const fish = new THREE.Group(); scene.add(fish);
+const fishMat = new THREE.MeshStandardMaterial({ color: 0xffd23f, roughness: 0.5 });
+part(ball, fishMat, fish, 0, 0, 0, 0.2, 0.13, 0.07);
+const fishTail = new THREE.Group(); fishTail.position.x = -0.18; fish.add(fishTail);
+part(new THREE.ConeGeometry(0.1, 0.16, 8), fishMat, fishTail, -0.07, 0, 0).rotation.z = -Math.PI / 2;
+// bubbles drifting up
+const bubbleGeo = new THREE.SphereGeometry(1, 12, 10);
+const bubbleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.45, roughness: 0.1, metalness: 0.2 });
+const bubbles = [];
+function bubble(x, y, z, s = 0.05) {
+  if (calm) return;
+  const b = new THREE.Mesh(bubbleGeo, bubbleMat); b.position.set(x, y, z); b.scale.setScalar(s); b.userData.wob = Math.random() * 6; scene.add(b); bubbles.push(b);
+}
+
+// the octopus
+const COLORS = { Coral: [0xff7a5c, 0xffd0bf], Grape: [0xa56be0, 0xe6d2ff], Bubblegum: [0xf07fb0, 0xffd8ea], Ocean: [0x4f9fe0, 0xd3ecff], Sunny: [0xf5c242, 0xfff1c2] };
+let skinHex = COLORS.Coral[0];
+const skin = new THREE.MeshStandardMaterial({ color: skinHex, roughness: 0.55 });
+const pale = new THREE.MeshStandardMaterial({ color: COLORS.Coral[1], roughness: 0.6 });
+const spotMat = new THREE.MeshStandardMaterial({ roughness: 0.6 });
+const tintSpots = () => spotMat.color.copy(skin.color).multiplyScalar(0.78); tintSpots();
+const dark = new THREE.MeshStandardMaterial({ color: 0x1d1622, roughness: 0.3 });
+const eyeWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+const shine = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const blush = new THREE.MeshStandardMaterial({ color: 0xff6f8f, roughness: 1, transparent: true, opacity: 0.55 });
+
+const root = new THREE.Group(); scene.add(root);
+const body = new THREE.Group(); root.add(body);
+const mantle = part(ball, skin, body, 0, 0.62, -0.1, 0.62, 0.72, 0.62);           // the big round head
+part(ball, skin, body, 0, 0.12, 0, 0.58, 0.4, 0.56);                                // where the arms join
+for (const [th, ph, s] of [[0.3, 0.5, 0.07], [-0.5, 0.7, 0.05], [1.0, 0.9, 0.06], [-1.2, 0.45, 0.06], [2.4, 0.8, 0.07], [3.4, 0.6, 0.05], [0.1, 0.25, 0.05]]) {
+  // freckles on the head, set on its surface
+  const d = V(Math.sin(ph) * Math.sin(th), Math.cos(ph), Math.sin(ph) * Math.cos(th));
+  part(ball, spotMat, body, d.x * 0.6, 0.62 + d.y * 0.7, -0.1 + d.z * 0.6, s, s, s);
+}
+const eyes = [];
+for (const s of [-1, 1]) {
+  const eye = new THREE.Group(); eye.position.set(0.21 * s, 0.3, 0.44); body.add(eye);
+  part(ball, eyeWhite, eye, 0, 0, 0, 0.14, 0.15, 0.1);
+  part(ball, dark, eye, 0, -0.01, 0.07, 0.08, 0.09, 0.05); part(ball, shine, eye, 0.025 * s, 0.03, 0.11, 0.025, 0.025, 0.015);
+  eyes.push(eye);
+  part(ball, blush, body, 0.36 * s, 0.13, 0.4, 0.07, 0.04, 0.03);
+}
+const smile = part(new THREE.TorusGeometry(0.07, 0.014, 8, 20, Math.PI), dark, body, 0, 0.12, 0.55); smile.rotation.z = Math.PI;
+// eight arms, each a chain of seven segments with a sucker underneath
+const arms = [];
+for (let i = 0; i < 8; i++) {
+  const a = (i + 0.5) / 8 * Math.PI * 2;
+  const base = new THREE.Group(); base.position.set(Math.sin(a) * 0.42, 0.05, Math.cos(a) * 0.42); base.rotation.y = a; body.add(base);
+  const segs = []; let parent = base;
+  for (let j = 0; j < 7; j++) {
+    const g = new THREE.Group(); g.position.z = j ? 0.15 : 0; parent.add(g);
+    const r = 0.12 * (1 - j / 7 * 0.72);
+    part(ball, skin, g, 0, 0, 0.075, r, r * 0.9, 0.11);
+    part(ball, pale, g, 0, -r * 0.75, 0.075, r * 0.45, r * 0.25, r * 0.45);
+    segs.push(g); parent = g;
+  }
+  arms.push({ segs, ph: i * 0.8 });
+}
+function poseArm(arm, lift, curl, wv, sp, t) {
+  arm.segs.forEach((g, j) => g.rotation.x = j ? curl + Math.sin(t * sp - j * 0.7 + arm.ph) * wv : lift);
+}
+// ink: little dark clouds that puff out and fade
+const inks = [];
+function inkCloud() {
+  if (calm) return;
+  const from = body.localToWorld(V(0, 0, -0.4));
+  for (let i = 0; i < 9; i++) {
+    const m = new THREE.Mesh(ball, new THREE.MeshStandardMaterial({ color: 0x2a2340, roughness: 1, transparent: true, opacity: 0.85, depthWrite: false }));
+    m.position.copy(from).add(V((Math.random() - .5) * 0.4, (Math.random() - .5) * 0.3, (Math.random() - .5) * 0.4)); m.scale.setScalar(0.1);
+    m.userData = { born: performance.now(), v: V((Math.random() - .5) * 0.02, -0.004 + Math.random() * 0.01, (Math.random() - .5) * 0.02) };
+    scene.add(m); inks.push(m);
+  }
+}
+
+const pops = [];
+const heartShape = new THREE.Shape(); heartShape.moveTo(0, -0.08);
+heartShape.bezierCurveTo(-0.14, 0.02, -0.07, 0.13, 0, 0.06); heartShape.bezierCurveTo(0.07, 0.13, 0.14, 0.02, 0, -0.08);
+const heartGeo = new THREE.ShapeGeometry(heartShape);
+function popHearts(n) {
+  if (calm) return;
+  const top = mantle.getWorldPosition(V());
+  for (let i = 0; i < n; i++) {
+    const h = new THREE.Mesh(heartGeo, new THREE.MeshBasicMaterial({ color: 0xff6f8f, transparent: true, side: THREE.DoubleSide }));
+    h.position.copy(top).add(V((Math.random() - .5) * 0.8, 0.7 + Math.random() * 0.2, 0.2)); h.scale.setScalar(1.6);
+    h.userData = { born: performance.now(), dx: (Math.random() - .5) * 0.6 }; scene.add(h); pops.push(h);
+    bubble(top.x + (Math.random() - .5) * 0.6, top.y + 0.3, top.z + 0.3, 0.04 + Math.random() * 0.04);
+  }
+}
+
+const colorRow = document.getElementById("colors");
+function restoreColor() { skin.color.setHex(skinHex); tintSpots(); }
+for (const [label, [c1, c2]] of Object.entries(COLORS)) {
+  const b = document.createElement("button"), hex = n => "#" + n.toString(16).padStart(6, "0");
+  b.className = "swatch"; b.style.background = `radial-gradient(circle at 35% 35%, ${hex(c2)} 0 26%, ${hex(c1)} 28%)`;
+  b.setAttribute("aria-label", label); b.setAttribute("aria-pressed", label === "Coral");
+  b.onclick = () => { skinHex = c1; pale.color.setHex(c2); colorRow.querySelectorAll(".swatch").forEach(s => s.setAttribute("aria-pressed", s === b)); start("shake", label + "! Wiggly!"); };
+  colorRow.append(b);
+}
+const sayEl = document.getElementById("say"); let sayTimer;
+function say(t) { sayEl.textContent = t; clearTimeout(sayTimer); sayTimer = setTimeout(() => sayEl.textContent = "", 2600); }
+let act = null, actStart = 0;
+const DUR = { wave: 2.4, ink: 2.8, rainbow: 3.2, jet: 3.2, hop: 1.1, shake: 0.9 };
+function start(name, line) { act = name; actStart = performance.now(); restoreColor(); if (line) say(line); controls.autoRotate = false; }
+document.getElementById("b-wave").onclick = () => start("wave", "Hello hello hello hello!");
+document.getElementById("b-ink").onclick = () => start("ink", "Oops! Ink cloud!");
+document.getElementById("b-rainbow").onclick = () => start("rainbow", "Look! I can change colors!");
+document.getElementById("b-jet").onclick = () => start("jet", "Whoosh!");
+const nameEl = document.getElementById("name");
+try { const n = localStorage.getItem("octopus-name"); if (n) nameEl.textContent = n; } catch (e) {}
+document.getElementById("b-name").onclick = () => {
+  const names = ["Inky", "Squiggles", "Wiggles", "Octavia", "Noodle", "Tako", "Splotch", "Bubbles", "Sir Eight-a-lot"];
+  const n = names[Math.floor(Math.random() * names.length)];
+  nameEl.textContent = n; try { localStorage.setItem("octopus-name", n); } catch (e) {}
+  start("hop", "My name is " + n + "!");
+};
+
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let down = null;
+canvas.addEventListener("pointerdown", e => down = [e.clientX, e.clientY]);
+canvas.addEventListener("pointerup", e => {
+  if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
+  ptr.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ptr, camera);
+  if (ray.intersectObject(root, true).length) {
+    start(Math.random() < 0.5 ? "hop" : "wave", ["Hee hee!", "Eight hugs for you!", "That tickles!", "Best friends!"][Math.floor(Math.random() * 4)]);
+    popHearts(4);
+  }
+});
+function resize() {
+  renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
+  camera.position.setLength(camera.aspect < 0.8 ? 10.5 : 7.5); camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize); resize();
+
+let nextBlink = 1.5, blinkAt = -1, nextBubble = 0, lastJetBubble = 0, inked = false;
+const clock = new THREE.Clock();
+function frame() {
+  const t = clock.getElapsedTime(), now = performance.now(), m = calm ? 0 : 1;
+  const a = act ? (now - actStart) / 1000 : 0, d = act ? DUR[act] : 1, p = clamp01(a / d);
+  if (act && a > d) { act = null; restoreColor(); }
+
+  // idle: hover above the sand, bob, turn to face whoever is watching, arms gently rippling
+  const camAng = Math.atan2(camera.position.x, camera.position.z);
+  let rootY = 0.85 + Math.sin(t * 1.3) * 0.06 * m, rotY = camAng + Math.sin(t * 0.4) * 0.3 * m, rotZ = 0, rotX = 0;
+  let sx = 1, sy = 1, eyeBig = 1;
+  let lift = 0.9 - Math.sin(t * 1.3) * 0.08 * m, curl = -0.17, wv = 0.12 * m, sp = 2, front = null;
+
+  if (act === "wave") {           // the two front arms wave hello; the other six wiggle along
+    rotY = camAng; wv = 0.3; sp = 6;
+    front = { lift: -1.0 + Math.sin(a * 9) * 0.35, curl: 0.12, wv: 0.45, sp: 12 };
+  } else if (act === "ink") {      // squeeze, puff out a cloud of ink, dart up, giggle
+    if (a < 0.4) { sy = 1 - ease.out(a / 0.4) * 0.15; sx = 1 + ease.out(a / 0.4) * 0.1; }
+    if (a > 0.4 && !inked) { inked = true; inkCloud(); }
+    const dart = a > 0.4 ? Math.sin(clamp01((a - 0.4) / 2.2) * Math.PI) : 0;
+    rootY += dart * 0.55; lift = 1.3 - dart * 0.3; curl = -0.05; eyeBig = 1 + dart * 0.25;
+    if (a > 1.8 && a < 1.85) say("Hee hee, sorry!");
+  } else if (act === "rainbow") {  // cycle through every color, then back to its own
+    skin.color.setHSL((a * 0.45) % 1, 0.65, 0.6); tintSpots();
+    wv = 0.25; sp = 5; rootY += Math.sin(a * 4) * 0.08;
+  } else if (act === "jet") {      // squeeze, shoot up with arms trailing, then parachute back down
+    if (a < 0.4) { const k = ease.out(a / 0.4); sy = 1 + k * 0.15; sx = 1 - k * 0.12; lift = 0.4; curl = -0.1; }
+    else if (a < 1.2) { const k = ease.out((a - 0.4) / 0.8); rootY += k * 0.9; lift = 1.45; curl = 0; wv = 0.08; sp = 14;
+      if (t - lastJetBubble > 0.06) { lastJetBubble = t; bubble(root.position.x + (Math.random() - .5) * 0.3, root.position.y - 0.4, root.position.z + (Math.random() - .5) * 0.3, 0.03 + Math.random() * 0.04); } }
+    else { const k = ease.inOut(clamp01((a - 1.2) / 2.0)); rootY += (1 - k) * 0.9; lift = 0.25 + k * 0.6; curl = -0.28 + k * 0.1; wv = 0.15; }
+  } else if (act === "hop") {
+    rootY += Math.sin(p * Math.PI) * 0.6; rotY += ease.inOut(p) * Math.PI * 2; wv = 0.3; sp = 8;
+  } else if (act === "shake") {
+    rotZ = Math.sin(a * 40) * 0.15 * (1 - p); wv = 0.4; sp = 16;
+  }
+  if (act !== "ink") inked = false;
+
+  root.position.set(0, rootY, 0); root.rotation.set(rotX, rotY, rotZ);
+  body.scale.set(sx, sy, sx);
+  arms.forEach((arm, i) => (front && (i === 0 || i === 7)) ? poseArm(arm, front.lift, front.curl, front.wv, front.sp, t) : poseArm(arm, lift, curl, wv, sp, t));
+  if (t > nextBlink) { blinkAt = t; nextBlink = t + 2 + Math.random() * 3; }
+  const blink = blinkAt >= 0 && t - blinkAt < 0.14 ? 1 - Math.abs((t - blinkAt) / 0.07 - 1) : 0;
+  eyes.forEach(e => { e.scale.set(eyeBig, Math.max(0.08, 1 - blink) * eyeBig, eyeBig); });
+
+  // the reef: seaweed sways, the fish swims laps, sunbeams shimmer, bubbles rise
+  weeds.forEach(w => w.segs.forEach((g, j) => g.rotation.z = Math.sin(t * 1.2 + w.ph + j * 0.5) * 0.12 * m));
+  const fa = t * 0.5 * (m || 0.0001);
+  fish.position.set(Math.cos(fa) * 2.8, 2.9 + Math.sin(t) * 0.15 * m, Math.sin(fa) * 2.8); fish.rotation.y = -fa - Math.PI / 2;
+  fishTail.rotation.y = Math.sin(t * 10) * 0.4 * m;
+  beams.forEach((b, i) => b.material.opacity = 0.05 + Math.sin(t * 0.7 + i * 2) * 0.03 * m);
+  if (t > nextBubble) { nextBubble = t + 0.35 + Math.random() * 0.5; bubble((Math.random() - .5) * 6, 0.05, -1 - Math.random() * 2, 0.03 + Math.random() * 0.04); }
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i]; b.position.y += 0.012; b.position.x += Math.sin(t * 3 + b.userData.wob) * 0.003;
+    if (b.position.y > 4.5) { scene.remove(b); bubbles.splice(i, 1); }
+  }
+  for (let i = inks.length - 1; i >= 0; i--) {
+    const k = inks[i], age = (now - k.userData.born) / 1000;
+    k.position.add(k.userData.v); k.scale.setScalar(0.1 + ease.out(clamp01(age / 1.2)) * 0.45); k.material.opacity = 0.85 * (1 - clamp01(age / 2.4));
+    if (age > 2.4) { scene.remove(k); k.material.dispose(); inks.splice(i, 1); }
+  }
+  for (let i = pops.length - 1; i >= 0; i--) {
+    const h = pops[i], age = (now - h.userData.born) / 1000;
+    h.position.y += 0.014; h.position.x += h.userData.dx * 0.01; h.lookAt(camera.position); h.material.opacity = 1 - age / 1.6;
+    if (age > 1.6) { scene.remove(h); h.material.dispose(); pops.splice(i, 1); }
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
