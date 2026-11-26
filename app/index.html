@@ -77,6 +77,14 @@ body.sloth {
   color-scheme: light;
 }
 [hidden] { display: none !important; }
+#splash { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(20, 18, 40, .35);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); padding: 16px; }
+#splash .splash-card { text-align: center; color: #fff; }
+#splash h2 { margin: 0; font-size: clamp(40px, 11vw, 72px); font-weight: 700; text-shadow: 0 4px 0 rgba(0,0,0,.25); }
+#splash p { margin: 6px 0 26px; font-size: clamp(17px, 4.5vw, 22px); }
+#play { font-size: clamp(22px, 6vw, 30px); font-weight: 700; padding: 18px 44px; border-radius: 999px; border: 0; color: #2b2457;
+  background: #ffd77a; box-shadow: 0 6px 0 rgba(0,0,0,.2); cursor: pointer; }
+#play:active { transform: translateY(3px); box-shadow: 0 3px 0 rgba(0,0,0,.2); }
 html, body { height: 100%; }
 body { margin: 0; background: linear-gradient(var(--sky-top), var(--sky-bot)); color: var(--ink); font-family: var(--display); overflow: hidden; }
 #stage { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
@@ -110,6 +118,7 @@ button:active { transform: scale(.96); }
 @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
 </style>
 
+<div id="splash"><div class="splash-card"><h2>Creature Pals</h2><p>Thirteen friends to play with</p><button id="play">Tap to play</button></div></div>
 <canvas id="stage" aria-label="A friendly 3D creature. Drag to spin it around, tap it to say hi."></canvas>
 <header>
   <div id="switch"><select id="pick" aria-label="Choose a friend"></select></div>
@@ -267,19 +276,26 @@ button:active { transform: scale(.96); }
 const FRIENDS = [["possum", "Possum"], ["giraffe", "Giraffe"], ["gorilla", "Gorilla"], ["otter", "Otter"], ["sloth", "Sloth"], ["monkey", "Monkey"],
   ["chicken", "Chicken"], ["pigeon", "Pigeon"], ["tarantula", "Tarantula"],
   ["octopus", "Octopus"], ["crab", "Crab"], ["lobster", "Lobster"], ["manta", "Manta Ray"]];
-const who = FRIENDS.some(([id]) => "#" + id === location.hash) ? location.hash.slice(1) : "possum";
-document.body.className = who;
-for (const [id] of FRIENDS) document.getElementById("panel-" + id).hidden = who !== id;
+let who = FRIENDS.some(([id]) => "#" + id === location.hash) ? location.hash.slice(1) : "possum";
+let GEN = 0, CLEANUP = null;            // GEN: which friend is current; an older friend's loop sees the change and stops
 const pick = document.getElementById("pick");
 for (const [id, label] of FRIENDS) pick.add(new Option(label, id, false, id === who));
-pick.onchange = () => { location.hash = pick.value; location.reload(); };
-document.getElementById("name").textContent = FRIENDS.find(([id]) => id === who)[1] + " Pal";
+function showPanel() {
+  document.body.className = who;
+  for (const [id] of FRIENDS) document.getElementById("panel-" + id).hidden = who !== id;
+  document.querySelectorAll("#panel-" + who + " .swatch").forEach(b => b.remove());   // the friend adds its colour buttons again
+  document.getElementById("name").textContent = FRIENDS.find(([id]) => id === who)[1] + " Pal";
+  document.getElementById("say").textContent = "Tap me!";
+  pick.value = who;
+}
+showPanel();
 
 // ---- sounds: made live with Web Audio (no files). Starts on the first tap, as browsers require.
 let AC = null, soundOn = true;
 try { soundOn = localStorage.getItem("pals-sound") !== "off"; } catch (e) {}
 const soundBtn = document.getElementById("sound");
-document.querySelector("#panel-" + who + " .row").append(soundBtn);   // sits right after "Name me"
+const placeSound = () => document.querySelector("#panel-" + who + " .row").append(soundBtn);   // sits right after "Name me"
+placeSound();
 function showSound() { soundBtn.textContent = soundOn ? "Sound" : "Muted"; soundBtn.setAttribute("aria-pressed", soundOn); }
 showSound();
 soundBtn.onclick = () => { soundOn = !soundOn; try { localStorage.setItem("pals-sound", soundOn ? "on" : "off"); } catch (e) {} showSound(); if (soundOn) { audio(); sfx("pop"); } ambienceFollowsSound(); };
@@ -464,10 +480,15 @@ let ambience = null;
 function startAmbience(name, vol = 0.18) {
   const c = audio(); if (!c || !name) return;
   clipBuffer(name).then(buf => {
-    if (!buf || ambience) return;
-    const s = c.createBufferSource(), g = c.createGain(); s.buffer = buf; s.loop = true; g.gain.value = soundOn ? vol : 0;
-    s.connect(g).connect(c.destination); s.start(); ambience = { g, vol };
+    if (!buf || ambience || AMBIENCE[who] !== name) return;
+    const s = c.createBufferSource(), g = c.createGain(); s.buffer = buf; s.loop = true; g.gain.setValueAtTime(0, c.currentTime);
+    g.gain.linearRampToValueAtTime(soundOn ? vol : 0, c.currentTime + 1.2);    // fade in
+    s.connect(g).connect(c.destination); s.start(); ambience = { g, vol, s };
   });
+}
+function stopAmbience() {
+  if (!ambience) return; const { g, s } = ambience, t = audio().currentTime; ambience = null;
+  g.gain.setTargetAtTime(0, t, 0.15); s.stop(t + 0.8);
 }
 function ambienceFollowsSound() { if (ambience) ambience.g.gain.setTargetAtTime(soundOn ? ambience.vol : 0, audio().currentTime, 0.2); }
 
@@ -665,17 +686,20 @@ function plushMotion(list, squishGroup, root) {
 
 // ---- plush makeover for any friend (2026-11-26): every group under `root` that directly holds body shapes becomes one
 // seamless soft shape; each material has its own pile length (0 = smooth felt); `felt(mesh)` marks faces with no pile.
-function plushAll(root, { mats, felt = () => false, keep = [] }) {
+function plushAll(root, { mats, felt = () => false, keep = [], paint = [] }) {   // paint: materials that only colour the fur (spots), never change the shape
   const lens = new Map(mats), matList = mats.map(m => m[0]);
   const fullSphere = g => g.type === "SphereGeometry" && Math.abs((g.parameters.phiLength ?? Math.PI * 2) - Math.PI * 2) < 1e-3 && Math.abs((g.parameters.thetaLength ?? Math.PI) - Math.PI) < 1e-3;
   const fatTube = g => g.type === "CylinderGeometry" && Math.min(g.parameters.radiusTop, g.parameters.radiusBottom) > 0.015 && Math.max(g.parameters.radiusTop, g.parameters.radiusBottom) > 0.03;
   const absorb = o => o.isMesh && o.visible && !keep.includes(o) && lens.has(o.material) && (fullSphere(o.geometry) || fatTube(o.geometry));
-  const groups = new Set(); root.traverse(o => { if (absorb(o)) groups.add(o.parent); });
+  const isPaint = o => paint.includes(o.material);
+  const hostOf = o => { for (let g = o.parent; g; g = g.parent) if (g.children.some(c => absorb(c) && !isPaint(c))) return g; };
+  const groups = new Map();
+  root.traverse(o => { if (!absorb(o)) return; const g = isPaint(o) ? hostOf(o) : o.parent; if (g) groups.set(g, [...(groups.get(g) || []), o]); });
   root.updateMatrixWorld(true);
   const parts = [];
-  for (const g of groups) {
+  for (const [g, meshes] of groups) {
     const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), items = [];
-    for (const o of g.children.filter(absorb)) {
+    for (const o of meshes) {
       const rel = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld), P = PV(), Q = new THREE.Quaternion(), S = PV();
       rel.decompose(P, Q, S);
       const mi = matList.indexOf(o.material), len = felt(o) ? 0 : lens.get(o.material), gp = o.geometry.parameters;
@@ -685,10 +709,10 @@ function plushAll(root, { mats, felt = () => false, keep = [] }) {
         const perp = ["x", "y", "z"].filter(k => k !== ax), r = (gp.radiusTop + gp.radiusBottom) / 2 * Math.max(sc[perp[0]], sc[perp[1]]);
         const half = Math.max(0, sz[ax] / 2 - r / Math.max(sc[ax], 1e-6)), a = c.clone(), b = c.clone(); a[ax] -= half; b[ax] += half;
         items.push({ cap: 1, a: a.applyMatrix4(rel), b: b.applyMatrix4(rel), r, mi, len, w: 0, f: 0 });
-      } else items.push({ cap: 0, c: P, m: new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(Q.invert())).elements, r: S.multiplyScalar(gp.radius || 1), mi, len, w: 0, f: 0 });
-      g.remove(o);
+      } else items.push({ cap: 0, c: P, m: new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(Q.invert())).elements, r: isPaint(o) ? (k => PV(k, k, k))(Math.max(S.x, S.y, S.z) * (gp.radius || 1)) : S.multiplyScalar(gp.radius || 1), mi, len, w: 0, f: 0, paint: isPaint(o) });   // a painted spot reaches as a ball, so it fills a solid patch
+      o.parent.remove(o);
     }
-    const S = plushSdf(items), geo = plushGeometry(S), pos = geo.attributes.position.array, n = pos.length / 3, M = matList.length;
+    const S = plushSdf(items.filter(it => !it.paint)), geo = plushGeometry(S), pos = geo.attributes.position.array, n = pos.length / 3, M = matList.length;
     const wts = new Float32Array(n * M), flen = new Float32Array(n);
     for (let v = 0; v < n; v++) {
       const ds = items.map(s => S.one(s, pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2])), lo = Math.min(...ds); let sw = 0;
@@ -750,6 +774,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -944,7 +969,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 10.5 : 7); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 
 // blinking
 let nextBlink = 1.5, blinkAt = -1;
@@ -1018,7 +1043,7 @@ function frame() {
   }
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 frame();
@@ -1032,6 +1057,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -1202,12 +1228,12 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 15 : 13); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 
 let nextBlink = 1.5, blinkAt = -1, leafGone = false;
 const clock = new THREE.Clock();
 // plush makeover (2026-11-26): seamless soft shapes, fur or short pile, felt faces, button eyes
-const plush = plushAll(root, { mats: [[coat, 0.03], [spotMat, 0.03], [cream, 0], [hoof, 0]], keep: [muzzle] });
+const plush = plushAll(root, { mats: [[coat, 0.03], [spotMat, 0.03], [cream, 0], [hoof, 0]], keep: [muzzle], paint: [spotMat] });
 plush.buttons(eyes, 1.0, 0.03);
 plush.resurface([smile]);
 function frame() {
@@ -1272,7 +1298,7 @@ function frame() {
   }
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
@@ -1285,6 +1311,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -1447,7 +1474,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 12 : 9); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 
 let nextBlink = 1.5, blinkAt = -1;
 const clock = new THREE.Clock();
@@ -1527,7 +1554,7 @@ function frame() {
   }
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
@@ -1539,6 +1566,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -1699,7 +1727,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 10 : 7); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 
 let nextBlink = 1.5, blinkAt = -1, lastBonk = -1, lastSplash = -1;
 const clock = new THREE.Clock(), rockHome = rock.position.clone();
@@ -1765,7 +1793,7 @@ function frame() {
   otterMotion(t); otterPlush.recolor();
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
@@ -1777,6 +1805,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -1912,7 +1941,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 11 : 7.5); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 
 let nextBlink = 2, blinkAt = -1, lastZ = 0;
 const clock = new THREE.Clock();
@@ -1968,7 +1997,7 @@ function frame() {
   }
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
@@ -1980,6 +2009,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -2171,7 +2201,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 10.5 : 7.5); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 
 let nextBlink = 1.5, blinkAt = -1, nextBubble = 0, lastJetBubble = 0, inked = false;
 const clock = new THREE.Clock();
@@ -2245,7 +2275,7 @@ function frame() {
   }
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
@@ -2257,6 +2287,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -2386,7 +2417,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 10.5 : 7.5); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 const eyeBlink = { next: 1.5, at: -1 };
 function blinkAmount(t) {
   if (t > eyeBlink.next) { eyeBlink.at = t; eyeBlink.next = t + 2 + Math.random() * 3; }
@@ -2547,7 +2578,7 @@ function frame() {
   reefTick(t, m); tickPops(now);
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
@@ -2559,6 +2590,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -2688,7 +2720,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 10.5 : 7.5); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 const eyeBlink = { next: 1.5, at: -1 };
 function blinkAmount(t) {
   if (t > eyeBlink.next) { eyeBlink.at = t; eyeBlink.next = t + 2 + Math.random() * 3; }
@@ -2816,7 +2848,7 @@ function frame() {
   reefTick(t, m); tickPops(now);
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
@@ -2828,6 +2860,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -2953,7 +2986,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 10.5 : 7.5); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 const eyeBlink = { next: 1.5, at: -1 };
 function blinkAmount(t) {
   if (t > eyeBlink.next) { eyeBlink.at = t; eyeBlink.next = t + 2 + Math.random() * 3; }
@@ -3110,7 +3143,7 @@ function frame() {
   jungleTick(t, m); tickPops(now);
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
@@ -3122,6 +3155,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -3251,7 +3285,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 10.5 : 7.5); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 const eyeBlink = { next: 1.5, at: -1 };
 function blinkAmount(t) {
   if (t > eyeBlink.next) { eyeBlink.at = t; eyeBlink.next = t + 2 + Math.random() * 3; }
@@ -3405,7 +3439,7 @@ function frame() {
   reefTick(t, m); tickPops(now);
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
@@ -3417,6 +3451,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -3496,7 +3531,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 10.5 : 7.5); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 const eyeBlink = { next: 1.5, at: -1 };
 function blinkAmount(t) {
   if (t > eyeBlink.next) { eyeBlink.at = t; eyeBlink.next = t + 2 + Math.random() * 3; }
@@ -3649,7 +3684,7 @@ function frame() {
   desertTick(t, m); tickPops(now);
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
@@ -3661,6 +3696,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -3740,7 +3776,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 10.5 : 7.5); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 const eyeBlink = { next: 1.5, at: -1 };
 function blinkAmount(t) {
   if (t > eyeBlink.next) { eyeBlink.at = t; eyeBlink.next = t + 2 + Math.random() * 3; }
@@ -3894,7 +3930,7 @@ function frame() {
   farmTick(t, m); tickPops(now);
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
@@ -3906,6 +3942,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v)), clamp01 = t => clamp
 
 const canvas = document.getElementById("stage");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const myGen = ++GEN; CLEANUP = () => { renderer.dispose(); renderer.forceContextLoss(); };
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -3985,7 +4022,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight;
   camera.position.setLength(camera.aspect < 0.8 ? 10.5 : 7.5); camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", () => myGen === GEN && resize()); resize();
 const eyeBlink = { next: 1.5, at: -1 };
 function blinkAmount(t) {
   if (t > eyeBlink.next) { eyeBlink.at = t; eyeBlink.next = t + 2 + Math.random() * 3; }
@@ -4129,11 +4166,25 @@ function frame() {
   parkTick(t, m); tickPops(now);
   controls.update();
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  if (myGen === GEN) requestAnimationFrame(frame);
 }
 frame();
 }
-({ possum, giraffe, gorilla, otter, sloth, monkey, octopus, lobster, manta, crab, tarantula, chicken, pigeon })[who]();
+const FRIEND_FNS = { possum, giraffe, gorilla, otter, sloth, monkey, octopus, lobster, manta, crab, tarantula, chicken, pigeon };
+function switchTo(id) {
+  if (id === who || !FRIEND_FNS[id]) return;
+  GEN++; if (CLEANUP) CLEANUP();                               // stop and free the old friend
+  const old = document.getElementById("stage"), fresh = old.cloneNode(false); old.replaceWith(fresh);   // drops its listeners
+  who = id; try { history.replaceState(null, "", "#" + id); } catch (e) {}
+  showPanel(); placeSound(); stopAmbience(); startAmbience(AMBIENCE[who]);
+  FRIEND_FNS[id]();
+}
+pick.onchange = () => switchTo(pick.value);
+addEventListener("hashchange", () => switchTo(location.hash.slice(1)));
+FRIEND_FNS[who]();
+// a title screen on opening: its one tap is what lets the browser play sound from then on
+const titleScreen = document.getElementById("splash");
+document.getElementById("play").onclick = () => { audio(); titleScreen.hidden = true; startAmbience(AMBIENCE[who]); };
 </script>
 <script>
 if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

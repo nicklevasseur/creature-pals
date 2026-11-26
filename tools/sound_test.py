@@ -13,7 +13,7 @@ with sync_playwright() as pw:
     missing = []; pg.on("response", lambda r: r.status >= 400 and missing.append(r.url))
     for w, trick in TRICK.items():
         pg.goto(url + "#" + w); pg.reload(); pg.wait_for_timeout(800)
-        pg.mouse.click(450, 120); pg.locator(f"#panel-{w}").get_by_role("button", name=trick, exact=True).click(); pg.wait_for_timeout(2500)
+        pg.click("#play"); pg.locator(f"#panel-{w}").get_by_role("button", name=trick, exact=True).click(); pg.wait_for_timeout(2500)
         got = pg.evaluate("[Object.keys(CLIPS).sort().join(' '), !!ambience, AC && AC.state]")
         print(f"{w:8} {trick:14} clips: {got[0]:40} loop playing: {got[1]}  audio: {got[2]}")
     print("missing files:", missing or "none"); print("errors:", errs or "none"); b.close()
