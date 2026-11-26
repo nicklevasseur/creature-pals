@@ -1198,6 +1198,36 @@ const shellTop = part(new THREE.SphereGeometry(0.12, 16, 8, 0, Math.PI * 2, 0, M
 const shellBot = part(new THREE.SphereGeometry(0.12, 16, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), clamMat, clam, 0, 0, 0, 1, 0.5, 1);
 const pearl = part(new THREE.SphereGeometry(0.04, 12, 10), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, metalness: 0.3 }), clam, 0, 0.01, 0);
 
+// ---- soft fur: shells cut into strands by a noise map (a classic game technique that runs fine on tablets)
+const FUR_LAYERS = calm ? 8 : 16;
+const furTex = (() => {
+  const n = 128, d = new Uint8Array(n * n * 4);
+  for (let i = 0; i < n * n; i++) { const v = Math.random() ** 0.7 * 255; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
+  const t = new THREE.DataTexture(d, n, n, THREE.RGBAFormat); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(9, 5);
+  t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
+})();
+const furSync = [];
+function furLayers(src) {
+  const mats = [];
+  for (let k = 1; k <= FUR_LAYERS; k++) {
+    const f = k / FUR_LAYERS, m = new THREE.MeshStandardMaterial({ roughness: 1, alphaMap: furTex, alphaTest: 0.08 + 0.85 * f });
+    furSync.push([m, src, 0.72 + 0.32 * f]); mats.push(m);
+  }
+  return mats;
+}
+const furMats = new Map([[fur, furLayers(fur)], [cream, furLayers(cream)], [earMat, furLayers(earMat)]]);
+const furry = [];
+root.traverse(o => { if (o.isMesh && o.geometry === ball && furMats.has(o.material) && o.parent !== face) furry.push(o); });
+for (const m of furry) {
+  const len = Math.min(0.045, Math.min(m.scale.x, m.scale.y, m.scale.z) * 0.18);
+  furMats.get(m.material).forEach((lm, i) => {
+    const f = (i + 1) / FUR_LAYERS, s = new THREE.Mesh(ball, lm);
+    s.position.copy(m.position); s.position.y -= 0.012 * f * f; s.quaternion.copy(m.quaternion);
+    s.scale.set(m.scale.x + len * f, m.scale.y + len * f, m.scale.z + len * f); m.parent.add(s);
+  });
+}
+const syncFur = () => furSync.forEach(([m, src, k]) => m.color.copy(src.color).multiplyScalar(k));
+
 const pops = [];
 const heartShape = new THREE.Shape(); heartShape.moveTo(0, -0.08);
 heartShape.bezierCurveTo(-0.14, 0.02, -0.07, 0.13, 0, 0.06); heartShape.bezierCurveTo(0.07, 0.13, 0.14, 0.02, 0, -0.08);
@@ -1317,6 +1347,7 @@ function frame() {
     h.position.y += 0.014; h.position.x += h.userData.dx * 0.01; h.lookAt(camera.position); h.material.opacity = 1 - age / 1.6;
     if (age > 1.6) { scene.remove(h); h.material.dispose(); pops.splice(i, 1); }
   }
+  syncFur();
   controls.update();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
