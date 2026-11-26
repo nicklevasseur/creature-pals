@@ -1,0 +1,3 @@
+*.png
+!app/icons/*.png
+__pycache__/
