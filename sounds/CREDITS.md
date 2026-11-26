@@ -40,3 +40,16 @@ BigSoundBank's licence: https://bigsoundbank.com/licence.html
 | pebbles.mp3 | On a pebble beach | https://commons.wikimedia.org/wiki/File:On_a_pebble_beach.ogg | earthcalling (PDSounds) | Public domain |
 
 The tarantula's trick sounds reuse rustle.mp3 and leaves.mp3 (above); tarantulas make no sounds of their own.
+
+## Added 2026-11-26 for the whale and the cow
+
+| File | Made from | Source | Author | Licence |
+|---|---|---|---|---|
+| whale-song.mp3 | Humpback whale song clip ("Meno-song"), its loudest 6 s | https://www.fisheries.noaa.gov/national/science-data/sounds-ocean-mammals | NOAA Fisheries, NEFSC Passive Acoustics Branch | US federal government work (public domain); credit given as NOAA asks |
+| whale-call.mp3 | Humpback whale contact call ("moo"), Glacier Bay, its loudest 3 s | https://home.nps.gov/glba/learn/nature/soundclips.htm | National Park Service, Glacier Bay | US federal government work (public domain) |
+| big-splash.mp3 | Splash, Big #1 | https://bigsoundbank.com/splash-big-1-s1519.html | Joseph SARDIN (BigSoundBank) | CC0 |
+| moo.mp3 | Cow moos #3 | https://bigsoundbank.com/cow-moos-3-s2383.html | Joseph SARDIN (BigSoundBank) | CC0 |
+| moo2.mp3 | Cow moos #5 | https://bigsoundbank.com/UPLOAD/ogg/2385.ogg | Joseph SARDIN (BigSoundBank) | CC0 |
+| cowbell.mp3 | Cow And Bell | https://soundbible.com/1143-Cow-And-Bell.html | not named on the page | Public Domain (as stated on the page) |
+
+The cow's pasture plays amb-farm.mp3 (above).
