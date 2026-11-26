@@ -24,10 +24,13 @@ for (const s of [-1, 1]) {
   const f = new THREE.Group(); f.position.set(0.66 * s, -0.22, 0.5); f.rotation.order = "YXZ"; body.add(f);
   part(ball, skin, f, 0.2 * s, -0.08, -0.25, 0.14, 0.05, 0.5).rotation.set(0, -0.6 * s, -0.5 * s); flippers.push(f);
 }
-const tail1 = new THREE.Group(); tail1.position.set(0, 0.05, -1.0); body.add(tail1);
-part(ball, skin, tail1, 0, 0, -0.3, 0.36, 0.32, 0.55);
+part(ball, skin, body, 0, 0.03, -0.75, 0.55, 0.48, 0.7);                      // the body tapers toward the tail
+// each tail piece starts inside the one before it, a little narrower, so the tail flows out of the body with no joins
+const tail1 = new THREE.Group(); tail1.position.set(0, 0.04, -1.0); body.add(tail1);
+part(ball, skin, tail1, 0, 0, -0.2, 0.4, 0.35, 0.6);
+part(ball, skin, tail1, 0, 0, -0.6, 0.24, 0.21, 0.45);
 const tail2 = new THREE.Group(); tail2.position.set(0, 0, -0.75); tail1.add(tail2);
-part(ball, skin, tail2, 0, 0, -0.15, 0.16, 0.14, 0.28);
+part(ball, skin, tail2, 0, 0, -0.1, 0.2, 0.17, 0.32);
 for (const s of [-1, 1]) part(ball, skin, tail2, 0.34 * s, 0, -0.38, 0.45, 0.06, 0.22).rotation.y = 0.45 * s;   // flukes
 // water spout drops and singing notes
 const drops = [], notes = [];
