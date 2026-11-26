@@ -1,3 +1,5 @@
 *.png
 !app/icons/*.png
 __pycache__/
+blender/*.blend1
+blender/*.blend
